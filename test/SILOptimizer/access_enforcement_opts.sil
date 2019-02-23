@@ -1555,3 +1555,121 @@ bb3(%1 : $*X):
   return %10 : $()
 }
 
+// --- rdar://48239213: Fatal access conflict detected.
+//
+// The read/modify pair of accesses in testReadModifyConflictPair
+// cannot be merged without introducing a false conflict.
+
+public class TestClass {
+  @_hasStorage @_hasInitialValue var flags: Int64 { get set }
+}
+
+// CHECK-LABEL: sil hidden [noinline] @readFlags : $@convention(method) (Int64, @guaranteed TestClass) -> Bool {
+// CHECK: bb0(%0 : $Int64, %1 : $TestClass):
+// CHECK:   [[ADR:%.*]] = ref_element_addr %1 : $TestClass, #TestClass.flags
+// CHECK:   begin_access [read] [dynamic] [no_nested_conflict] [[ADR]] : $*Int64
+// CHECK:   load %4 : $*Builtin.Int64
+// CHECK:   end_access
+// CHECK-LABEL: } // end sil function 'readFlags'
+sil hidden [noinline] @readFlags : $@convention(method) (Int64, @guaranteed TestClass) -> Bool {
+bb0(%0 : $Int64, %1 : $TestClass):
+  %2 = ref_element_addr %1 : $TestClass, #TestClass.flags
+  %3 = begin_access [read] [dynamic] [no_nested_conflict] %2 : $*Int64
+  %4 = struct_element_addr %3 : $*Int64, #Int64._value
+  %5 = load %4 : $*Builtin.Int64
+  end_access %3 : $*Int64
+  %7 = struct_extract %0 : $Int64, #Int64._value
+  %8 = builtin "cmp_eq_Int64"(%5 : $Builtin.Int64, %7 : $Builtin.Int64) : $Builtin.Int1
+  %9 = struct $Bool (%8 : $Builtin.Int1)
+  return %9 : $Bool
+}
+
+// CHECK-LABEL: sil @testReadModifyConflictPair : $@convention(method) (@guaranteed TestClass) -> () {
+// CHECK: bb0(%0 : $TestClass):
+// CHECK:   [[ADR:%.*]] = ref_element_addr %0 : $TestClass, #TestClass.flags
+// CHECK:   begin_access [read] [dynamic] [no_nested_conflict] [[ADR]] : $*Int64
+// CHECK:   load
+// CHECK:   end_access
+// CHECK:   apply {{.*}} : $@convention(method) (Int64, @guaranteed TestClass) -> Bool
+// CHECK:   begin_access [modify] [dynamic] [no_nested_conflict] [[ADR]] : $*Int64
+// CHECK:   store
+// CHECK:   end_access
+// CHECK-LABEL: } // end sil function 'testReadModifyConflictPair'
+sil @testReadModifyConflictPair : $@convention(method) (@guaranteed TestClass) -> () {
+bb0(%0 : $TestClass):
+  %1 = ref_element_addr %0 : $TestClass, #TestClass.flags
+  %2 = begin_access [read] [dynamic] %1 : $*Int64
+  %3 = load %2 : $*Int64
+  end_access %2 : $*Int64
+  %5 = function_ref @readFlags : $@convention(method) (Int64, @guaranteed TestClass) -> Bool
+  %6 = apply %5(%3, %0) : $@convention(method) (Int64, @guaranteed TestClass) -> Bool
+  %7 = integer_literal $Builtin.Int64, 3
+  %8 = struct $Int64 (%7 : $Builtin.Int64)
+  %9 = begin_access [modify] [dynamic] %1 : $*Int64
+  store %8 to %9 : $*Int64
+  end_access %9 : $*Int64
+  %12 = tuple ()
+  return %12 : $()
+}
+
+// public func testNestedReadMerging() {
+// Checks bailing on nested read scopes
+// We will create two scopes - nested conflict
+//
+// CHECK-LABEL: sil @testNestedReadMerging : $@convention(thin) () -> () {
+// CHECK: [[GLOBAL:%.*]] = global_addr @globalX : $*X
+// CHECK-NEXT: [[BEGIN:%.*]] = begin_access [read] [dynamic] [[GLOBAL]] : $*X
+// CHECK-NEXT: load [[BEGIN]] : $*X
+// CHECK-NEXT: load [[BEGIN]] : $*X
+// CHECK-NEXT: [[BEGIN2:%.*]] = begin_access [read] [dynamic] [no_nested_conflict] [[GLOBAL]] : $*X
+// CHECK-NEXT: load [[BEGIN2]] : $*X
+// CHECK-NEXT: end_access [[BEGIN2]] : $*X
+// CHECK-NEXT: end_access [[BEGIN]] : $*X
+// CHECK-NOT: begin_access
+// CHECK-LABEL: } // end sil function 'testNestedReadMerging'
+sil @testNestedReadMerging : $@convention(thin) () -> () {
+bb0:
+  %0 = global_addr @globalX: $*X
+  %1 = begin_access [read] [dynamic] %0 : $*X
+  %2 = load %1 : $*X
+  end_access %1 : $*X
+  %4 = begin_access [read] [dynamic] %0 : $*X
+  %5 = load %4 : $*X
+  %7 = begin_access [read] [dynamic] %0 : $*X
+  %8 = load %7 : $*X
+  end_access %7 : $*X
+  end_access %4 : $*X
+  %10 = tuple ()
+  return %10 : $()
+}
+
+// public func testNestedWriteBailout() {
+// Same as testNestedReadBailout but with modify
+// We will create two scopes - nested conflict
+//
+// CHECK-LABEL: sil @testNestedWriteBailout : $@convention(thin) () -> () {
+// CHECK: [[GLOBAL:%.*]] = global_addr @globalX : $*X
+// CHECK-NEXT: [[BEGIN:%.*]] = begin_access [modify] [dynamic] [[GLOBAL]] : $*X
+// CHECK-NEXT: load [[BEGIN]] : $*X
+// CHECK-NEXT: load [[BEGIN]] : $*X
+// CHECK-NEXT: [[BEGIN2:%.*]] = begin_access [modify] [dynamic] [no_nested_conflict] [[GLOBAL]] : $*X
+// CHECK-NEXT: load [[BEGIN2]] : $*X
+// CHECK-NEXT: end_access [[BEGIN2]] : $*X
+// CHECK-NEXT: end_access [[BEGIN]] : $*X
+// CHECK-NOT: begin_access
+// CHECK-LABEL: } // end sil function 'testNestedWriteBailout'
+sil @testNestedWriteBailout : $@convention(thin) () -> () {
+bb0:
+  %0 = global_addr @globalX: $*X
+  %1 = begin_access [modify] [dynamic] %0 : $*X
+  %2 = load %1 : $*X
+  end_access %1 : $*X
+  %4 = begin_access [modify] [dynamic] %0 : $*X
+  %5 = load %4 : $*X
+  %7 = begin_access [modify] [dynamic] %0 : $*X
+  %8 = load %7 : $*X
+  end_access %7 : $*X
+  end_access %4 : $*X
+  %10 = tuple ()
+  return %10 : $()
+}
