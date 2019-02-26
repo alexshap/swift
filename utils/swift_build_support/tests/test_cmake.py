@@ -39,6 +39,8 @@ class CMakeTestCase(unittest.TestCase):
                          export_compile_commands=False,
                          distcc=False,
                          cmake_generator="Ninja",
+                         cmake_c_launcher=None,
+                         cmake_cxx_launcher=None,
                          clang_compiler_version=None,
                          clang_user_visible_version=None,
                          build_jobs=8,
