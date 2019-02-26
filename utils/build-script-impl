@@ -277,6 +277,8 @@ KNOWN_SETTINGS=(
     coverage-db                        ""        "If set, coverage database to use when prioritizing testing"
     build-toolchain-only               ""        "If set, only build the necessary tools to build an external toolchain"
     skip-local-host-install            ""        "If we are cross-compiling multiple targets, skip an install pass locally if the hosts match"
+    cmake-c-launcher                   ""        "the absolute path to set CMAKE_C_COMPILER_LAUNCHER"
+    cmake-cxx-launcher                 ""        "the absolute path to set CMAKE_CXX_COMPILER_LAUNCHER"
 )
 
 # Centralized access point for traced command invocation.
