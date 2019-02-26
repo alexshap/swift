@@ -1107,8 +1107,9 @@ def main_preset():
     preset_args = migrate_swift_sdks(preset.format_args())
 
     if args.distcc and (args.cmake_c_launcher or args.cmake_cxx_launcher):
-        diagnostics.fatal('--distcc can not be used with' \
-            + ' --cmake-c-launcher or --cmake-cxx-launcher')
+        diagnostics.fatal(
+            '--distcc can not be used with' +
+            ' --cmake-c-launcher or --cmake-cxx-launcher')
 
     build_script_args = [sys.argv[0]]
     if args.dry_run:
